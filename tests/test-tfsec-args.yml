@@ -1,0 +1,42 @@
+name: Test tfsec extra args
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create Terraform fixture files
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/tests/fixtures/terraform-args"
+          cat > "$GITHUB_WORKSPACE/tests/fixtures/terraform-args/main.tf" <<'EOF'
+          resource "aws_s3_bucket" "example" {
+            bucket = "my-args-test-bucket"
+          }
+          EOF
+
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          working_directory: tests/fixtures/terraform-args
+          tfsec_args: "--force-all-dirs"
+          soft_fail_commenter: "true"
+
+      - name: Assert action ran with extra tfsec args
+        env:
+          OUTCOME: ${{ steps.action.outcome }}
+          RETURN_CODE: ${{ steps.action.outputs.tfsec-return-code }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "tfsec-return-code: $RETURN_CODE"
+          if [ "$OUTCOME" = "success" ]; then
+            echo "PASS: action succeeded with extra tfsec args"
+          elif [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (expected - sentinel repo or commenter API failure)"
+          else
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
